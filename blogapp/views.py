@@ -3,6 +3,7 @@ from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.permissions import AllowAny,IsAuthenticated
 from django.contrib.auth.hashers import check_password
 from django.conf import settings
@@ -10,8 +11,11 @@ from django.http import JsonResponse
 from .models import User, Post
 from .serializers import UserSerializer, LoginSerializer, PostSerializer
 import jwt
+from rest_framework.permissions import IsAuthenticatedOrReadOnly
 from datetime import datetime, timedelta
-
+from rest_framework import generics
+from .models import MediaFile
+from .serializers import MediaFileSerializer
 
 # =====================================
 # JWT Authentication Helper
@@ -91,12 +95,12 @@ class RegisterView(APIView):
 
         if serializer.is_valid():
             user = serializer.save()
-            tokens = get_tokens_for_user(user)
+           # tokens = get_tokens_for_user(user)
 
             return Response(
                 {
                     "message": "User registered successfully",
-                    "tokens": tokens,
+                   # "tokens": tokens,
                 },
                 status=status.HTTP_201_CREATED,
             )
@@ -259,11 +263,20 @@ class PostDetailView(APIView):
         if not post:
             return Response(
                 {"error": "Post not found or permission denied"},
-                status=status.HTTP_404_NOT_FOUND
-            )
+                status=status.HTTP_404_NOT_FOUND )
 
         post.delete()
         return Response(
             {"message": "Post deleted successfully"},
             status=status.HTTP_204_NO_CONTENT
         )
+class MediaFileListCreateView(generics.ListCreateAPIView):
+    queryset = MediaFile.objects.all()
+    serializer_class = MediaFileSerializer
+    permission_classes = [IsAuthenticatedOrReadOnly] 
+    parser_classes = (MultiPartParser, FormParser)
+
+class MediaFileDetailView(generics.RetrieveAPIView):
+    queryset = MediaFile.objects.all()
+    serializer_class = MediaFileSerializer
+    permission_classes = [IsAuthenticated]        

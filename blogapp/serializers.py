@@ -1,7 +1,7 @@
 # blogapp/serializers.py
 from rest_framework import serializers
 from .models import User, Post
-
+from .models import MediaFile
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -26,3 +26,8 @@ class PostSerializer(serializers.ModelSerializer):
         model = Post
         fields = ['id', 'title', 'content', 'author', 'image', 'created_at']
         read_only_fields = ['id', 'author', 'created_at']
+        
+class MediaFileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MediaFile
+        fields = '__all__'        

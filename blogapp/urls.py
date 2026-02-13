@@ -1,5 +1,6 @@
 from django.urls import path
 from . import views
+from .views import MediaFileListCreateView, MediaFileDetailView
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from .views import (
     RegisterView,
@@ -21,7 +22,8 @@ urlpatterns = [
      path("posts/", PostListCreateView.as_view()),
    #path("posts/create/", PostCreateView.as_view()),
     path("posts/<int:pk>/", PostDetailView.as_view()),
-    
+    path('media/', MediaFileListCreateView.as_view(), name='media-list-create'),
+    path('media/<int:pk>/', MediaFileDetailView.as_view(), name='media-detail'),
     # ============================
     # Dashboard / Template URLs
     # ============================
