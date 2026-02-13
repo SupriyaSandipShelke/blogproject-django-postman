@@ -1,5 +1,6 @@
 from django.urls import path
 from . import views
+from blogapp.views import CacheTestView
 from .views import MediaFileListCreateView, MediaFileDetailView
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from .views import (
@@ -16,7 +17,7 @@ urlpatterns = [
     path("login/", LoginView.as_view()),
     path("token/", TokenObtainPairView.as_view(), name="token_obtain_pair"),        # login → get access + refresh
     path("token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),       # refresh access token
-
+    path('cache-test/', CacheTestView.as_view()),
 
     #path("posts/", PostListView.as_view()),
      path("posts/", PostListCreateView.as_view()),

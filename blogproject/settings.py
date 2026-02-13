@@ -117,6 +117,13 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "blog-cache",
+    }
+}
+
 
 # # REST Framework configuration
 # REST_FRAMEWORK = {

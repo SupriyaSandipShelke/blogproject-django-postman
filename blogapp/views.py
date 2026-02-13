@@ -16,7 +16,7 @@ from datetime import datetime, timedelta
 from rest_framework import generics
 from .models import MediaFile
 from .serializers import MediaFileSerializer
-
+from django.core.cache import cache
 # =====================================
 # JWT Authentication Helper
 # =====================================
@@ -205,17 +205,61 @@ class PostListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        cache_key = "post_list"
+
+        # 🔍 Check cache
+        cached_data = cache.get(cache_key)
+
+        if cached_data:
+            print("🔥 CACHE HIT - Post List")
+            return Response(cached_data)
+
+        print("❌ CACHE MISS - Fetching from DB")
+
         posts = Post.objects.all()
         serializer = PostSerializer(posts, many=True)
+
+        # 🧠 Store in cache for 2 minutes
+        cache.set(cache_key, serializer.data, timeout=120)
+
         return Response(serializer.data)
 
     def post(self, request):
         serializer = PostSerializer(data=request.data)
+
         if serializer.is_valid():
-           # serializer.save(user=request.user)
-             serializer.save(author=request.user)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+            serializer.save(author=request.user)
+
+            # 🔥 Invalidate cache after new post
+            cache.delete("post_list")
+
+            print("🗑 Cache Cleared After New Post")
+
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class CacheTestView(APIView):
+
+    def get(self, request):
+        data = cache.get("my_cached_data")
+
+        if data:
+            print("🔥 Cache HIT")
+            return Response({
+                "message": "Data from Cache",
+                "data": data
+            })
+
+        print("❌ Cache MISS")
+        data = "Hello Supriya 🚀"
+
+        cache.set("my_cached_data", data, timeout=60)
+
+        return Response({
+            "message": "Data created & stored in Cache",
+            "data": data
+        })
 # =====================================
 # Retrieve / Update / Delete Post
 # =====================================
@@ -279,4 +323,6 @@ class MediaFileListCreateView(generics.ListCreateAPIView):
 class MediaFileDetailView(generics.RetrieveAPIView):
     queryset = MediaFile.objects.all()
     serializer_class = MediaFileSerializer
-    permission_classes = [IsAuthenticated]        
+    permission_classes = [IsAuthenticated]    
+    
+        
