@@ -1,6 +1,6 @@
 # blogapp/serializers.py
 from rest_framework import serializers
-from .models import User, Post
+from .models import User, Post ,Comment
 from .models import MediaFile
 
 class UserSerializer(serializers.ModelSerializer):
@@ -27,6 +27,25 @@ class PostSerializer(serializers.ModelSerializer):
         fields = ['id', 'title', 'content', 'author', 'image', 'created_at']
         read_only_fields = ['id', 'author', 'created_at']
         
+class CommentSerializer(serializers.ModelSerializer):
+    user = serializers.CharField(source="user.email")
+
+    class Meta:
+        model = Comment
+        fields = ["user", "text", "created_at"]
+        
+class PostFeedbackSerializer(serializers.ModelSerializer):
+    author = serializers.CharField(source="author.email")
+    likes_count = serializers.SerializerMethodField()
+    comments = CommentSerializer(many=True)
+
+    class Meta:
+        model = Post
+        fields = ["id", "title", "author", "likes_count", "comments"]
+
+    def get_likes_count(self, obj):
+        return obj.likes.count()        
+    
 class MediaFileSerializer(serializers.ModelSerializer):
     class Meta:
         model = MediaFile

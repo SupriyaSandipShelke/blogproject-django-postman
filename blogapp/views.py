@@ -1,171 +1,69 @@
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.views import APIView
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated, IsAuthenticatedOrReadOnly
 from rest_framework.response import Response
-from rest_framework import status
+from rest_framework import status, generics
 from rest_framework.parsers import MultiPartParser, FormParser
-from rest_framework.permissions import AllowAny,IsAuthenticated
 from django.contrib.auth.hashers import check_password
+from django.core.mail import send_mail
 from django.conf import settings
-from django.http import JsonResponse
-from .models import User, Post
-from .serializers import UserSerializer, LoginSerializer, PostSerializer
-import jwt
-from rest_framework.permissions import IsAuthenticatedOrReadOnly
-from datetime import datetime, timedelta
-from rest_framework import generics
-from .models import MediaFile
-from .serializers import MediaFileSerializer
 from django.core.cache import cache
+import jwt, random
+
+from .models import User, Post, MediaFile
+from .serializers import (
+    UserSerializer, LoginSerializer, PostSerializer,
+    PostFeedbackSerializer, MediaFileSerializer
+)
+
 # =====================================
 # JWT Authentication Helper
 # =====================================
-def authenticate_token(request):
-    auth_header = request.headers.get('Authorization')
-
-    if not auth_header:
-        return None
-
-    try:
-        # Expected format: Bearer <token>
-        token = auth_header.split(' ')[1]
-
-        payload = jwt.decode(
-            token,
-            settings.SECRET_KEY,
-            algorithms=["HS256"]
-        )
-
-        user = User.objects.get(id=payload["user_id"])
-        return user
-
-    except (jwt.ExpiredSignatureError, jwt.DecodeError, User.DoesNotExist):
-        return None
-
 def get_tokens_for_user(user):
     refresh = RefreshToken.for_user(user)
-
-    # optional custom data inside token
     refresh["user_id"] = user.id
     refresh["email"] = user.email
-
     return {
         "refresh": str(refresh),
         "access": str(refresh.access_token),
     }
-#SIMPLE_JWT = {
-#   'ACCESS_TOKEN_LIFETIME': timedelta(hours=24),   # 24 hours
-#   'REFRESH_TOKEN_LIFETIME': timedelta(days=100),    # 7 days
-#   'AUTH_HEADER_TYPES': ('Bearer',),
-#   'ROTATE_REFRESH_TOKENS': True,
-#   'BLACKLIST_AFTER_ROTATION': True,
-#}
+
+def generate_otp():
+    return str(random.randint(100000, 999999))
+
 
 # =====================================
-# Register API (Public)
+# Register API
 # =====================================
-# class RegisterView(APIView):
-#     permission_classes = [AllowAny]
-
-#     def post(self, request):
-#         serializer = UserSerializer(data=request.data)
-
-#         if serializer.is_valid():
-#             serializer.save()
-#             return Response(
-#                 {"message": "User registered successfully"},
-#                 status=status.HTTP_201_CREATED
-#             )
-
-#         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
 class RegisterView(APIView):
     permission_classes = [AllowAny]
-     # 👇 ADD THIS GET METHOD
-    def get(self, request):
-        return Response(
-            {
-                "message": "Register API working",
-                "usage": "Send POST request with email and password"
-            },
-            status=status.HTTP_200_OK,
-        )
+
     def post(self, request):
         serializer = UserSerializer(data=request.data)
-
         if serializer.is_valid():
             user = serializer.save()
-           # tokens = get_tokens_for_user(user)
 
-            return Response(
-                {
-                    "message": "User registered successfully",
-                   # "tokens": tokens,
-                },
-                status=status.HTTP_201_CREATED,
+            send_mail(
+                subject="Registration Successful",
+                message=f"Hello {user.email}, Your registration was successful!",
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[user.email],
+                fail_silently=False,
             )
 
+            return Response(
+                {"message": "User registered successfully"},
+                status=status.HTTP_201_CREATED
+            )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+
 # =====================================
-# Login API (Public)
+# Login API
 # =====================================
-# class LoginView(APIView):
-#     permission_classes = [AllowAny]
-
-#     def post(self, request):
-#         serializer = LoginSerializer(data=request.data)
-
-#         if serializer.is_valid():
-#             email = serializer.validated_data["email"]
-#             password = serializer.validated_data["password"]
-
-#             try:
-#                 user = User.objects.get(email=email)
-
-#                 if check_password(password, user.password):
-#                     payload = {
-#                         "user_id": user.id,
-#                         "iat": datetime.utcnow(),
-#                         "exp": datetime.utcnow() + timedelta(hours=24)
-#                     }
-
-#                     token = jwt.encode(
-#                         payload,
-#                         settings.SECRET_KEY,
-#                         algorithm="HS256"
-#                     )
-
-#                     return Response(
-#                         {"token": token},
-#                         status=status.HTTP_200_OK
-#                     )
-
-#                 return Response(
-#                     {"error": "Invalid credentials"},
-#                     status=status.HTTP_401_UNAUTHORIZED
-#                 )
-
-#             except User.DoesNotExist:
-#                 return Response(
-#                     {"error": "User not found"},
-#                     status=status.HTTP_404_NOT_FOUND
-#                 )
-
-#         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
 class LoginView(APIView):
     permission_classes = [AllowAny]
-      # 👇 ADD THIS GET METHOD
-    def get(self, request):
-        return Response(
-            {
-                "message": "Login API working",
-                "usage": "Send POST request with email and password"
-            },
-            status=status.HTTP_200_OK,
-        )
+
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
 
@@ -176,123 +74,143 @@ class LoginView(APIView):
             try:
                 user = User.objects.get(email=email)
             except User.DoesNotExist:
-                return Response(
-                    {"error": "User not found"},
-                    status=status.HTTP_404_NOT_FOUND,
-                )
+                return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
 
             if not check_password(password, user.password):
-                return Response(
-                    {"error": "Invalid credentials"},
-                    status=status.HTTP_401_UNAUTHORIZED,
-                )
+                return Response({"error": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED)
 
             tokens = get_tokens_for_user(user)
 
+            send_mail(
+                subject="Login Successful",
+                message=f"Hello {user.email}, You have logged in successfully!",
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[user.email],
+                fail_silently=False,
+            )
+
             return Response(
-                {
-                    "message": "Login successful",
-                    "tokens": tokens,
-                },
-                status=status.HTTP_200_OK,
+                {"message": "Login successful", "tokens": tokens},
+                status=status.HTTP_200_OK
             )
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
 # =====================================
-# Create Post (Login Required)
+# Forgot Password
+# =====================================
+class ForgotPasswordView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        email = request.data.get("email")
+
+        try:
+            User.objects.get(email=email)
+        except User.DoesNotExist:
+            return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        otp = generate_otp()
+        cache.set(f"reset_otp_{email}", otp, timeout=300)
+
+        send_mail(
+            subject="Password Reset OTP",
+            message=f"Your OTP is {otp}",
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[email],
+            fail_silently=False,
+        )
+
+        return Response({"message": "OTP sent"}, status=status.HTTP_200_OK)
+
+
+# =====================================
+# Reset Password
+# =====================================
+class ResetPasswordView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        email = request.data.get("email")
+        otp = request.data.get("otp")
+        new_password = request.data.get("new_password")
+
+        cached_otp = cache.get(f"reset_otp_{email}")
+
+        if not cached_otp:
+            return Response({"error": "OTP expired"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if otp != cached_otp:
+            return Response({"error": "Invalid OTP"}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = User.objects.get(email=email)
+        user.set_password(new_password)
+        user.save()
+
+        cache.delete(f"reset_otp_{email}")
+
+        return Response({"message": "Password reset successful"})
+
+
+# =====================================
+# POST LIST + CREATE
 # =====================================
 class PostListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        cache_key = "post_list"
+        user = request.user
 
-        # 🔍 Check cache
-        cached_data = cache.get(cache_key)
+        # ADMIN → all posts
+        if user.is_staff or user.is_superuser:
+            posts = Post.objects.all().order_by("-created_at")
 
-        if cached_data:
-            print("🔥 CACHE HIT - Post List")
-            return Response(cached_data)
+        # NORMAL USER → own posts
+        else:
+            posts = Post.objects.filter(author=user).order_by("-created_at")
 
-        print("❌ CACHE MISS - Fetching from DB")
-
-        posts = Post.objects.all()
         serializer = PostSerializer(posts, many=True)
-
-        # 🧠 Store in cache for 2 minutes
-        cache.set(cache_key, serializer.data, timeout=120)
-
         return Response(serializer.data)
 
     def post(self, request):
         serializer = PostSerializer(data=request.data)
-
         if serializer.is_valid():
             serializer.save(author=request.user)
-
-            # 🔥 Invalidate cache after new post
-            cache.delete("post_list")
-
-            print("🗑 Cache Cleared After New Post")
-
             return Response(serializer.data, status=status.HTTP_201_CREATED)
-
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-class CacheTestView(APIView):
 
-    def get(self, request):
-        data = cache.get("my_cached_data")
-
-        if data:
-            print("🔥 Cache HIT")
-            return Response({
-                "message": "Data from Cache",
-                "data": data
-            })
-
-        print("❌ Cache MISS")
-        data = "Hello Supriya 🚀"
-
-        cache.set("my_cached_data", data, timeout=60)
-
-        return Response({
-            "message": "Data created & stored in Cache",
-            "data": data
-        })
 # =====================================
-# Retrieve / Update / Delete Post
+# POST DETAIL / UPDATE / DELETE
 # =====================================
 class PostDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
-    # Helper function to get post by pk and author
-    def get_object(self, pk, user):
+    def get_object(self, pk):
         try:
-            return Post.objects.get(pk=pk, author=user)
+            return Post.objects.get(pk=pk)
         except Post.DoesNotExist:
             return None
 
-    # -------- GET single post --------
     def get(self, request, pk):
-        post = self.get_object(pk, request.user)
+        post = self.get_object(pk)
         if not post:
-            return Response(
-                {"error": "Post not found"},
-                status=status.HTTP_404_NOT_FOUND
-            )
+            return Response({"error": "Post not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        serializer = PostSerializer(post)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        if request.user.is_staff or request.user.is_superuser or post.author == request.user:
+            serializer = PostSerializer(post)
+            return Response(serializer.data)
 
-    # -------- UPDATE post (Author Only) --------
+        return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
+
     def put(self, request, pk):
-        post = self.get_object(pk, request.user)
+        post = self.get_object(pk)
         if not post:
-            return Response(
-                {"error": "Post not found or permission denied"},
-                status=status.HTTP_404_NOT_FOUND
-            )
+            return Response({"error": "Post not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        if post.author != request.user:
+            return Response({"error": "Only owner can update"}, status=status.HTTP_403_FORBIDDEN)
 
         serializer = PostSerializer(post, data=request.data, partial=True)
         if serializer.is_valid():
@@ -301,28 +219,53 @@ class PostDetailView(APIView):
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    # -------- DELETE post (Author Only) --------
     def delete(self, request, pk):
-        post = self.get_object(pk, request.user)
+        post = self.get_object(pk)
         if not post:
-            return Response(
-                {"error": "Post not found or permission denied"},
-                status=status.HTTP_404_NOT_FOUND )
+            return Response({"error": "Post not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        if post.author != request.user:
+            return Response({"error": "Only owner can delete"}, status=status.HTTP_403_FORBIDDEN)
 
         post.delete()
-        return Response(
-            {"message": "Post deleted successfully"},
-            status=status.HTTP_204_NO_CONTENT
-        )
+        return Response({"message": "Post deleted successfully"}, status=status.HTTP_204_NO_CONTENT)
+
+
+# =====================================
+# Feedback View
+# =====================================
+class FeedbackView(APIView):
+    def get(self, request):
+        posts = Post.objects.all().order_by("-created_at")
+        serializer = PostFeedbackSerializer(posts, many=True)
+        return Response(serializer.data)
+
+
+# =====================================
+# Cache Test
+# =====================================
+class CacheTestView(APIView):
+    def get(self, request):
+        data = cache.get("my_cached_data")
+        if data:
+            return Response({"message": "From cache", "data": data})
+
+        data = "Hello Supriya 🚀"
+        cache.set("my_cached_data", data, timeout=60)
+        return Response({"message": "Created", "data": data})
+
+
+# =====================================
+# Media Upload
+# =====================================
 class MediaFileListCreateView(generics.ListCreateAPIView):
     queryset = MediaFile.objects.all()
     serializer_class = MediaFileSerializer
-    permission_classes = [IsAuthenticatedOrReadOnly] 
+    permission_classes = [IsAuthenticatedOrReadOnly]
     parser_classes = (MultiPartParser, FormParser)
+
 
 class MediaFileDetailView(generics.RetrieveAPIView):
     queryset = MediaFile.objects.all()
     serializer_class = MediaFileSerializer
-    permission_classes = [IsAuthenticated]    
-    
-        
+    permission_classes = [IsAuthenticated]

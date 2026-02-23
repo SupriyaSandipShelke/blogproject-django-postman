@@ -117,10 +117,30 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+#EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+#EMAIL_HOST = "smtp.gmail.com"
+#EMAIL_PORT = 587
+#EMAIL_USE_TLS = True
+#EMAIL_HOST_USER = "supriyashelke2003@gmail.com"
+#EMAIL_HOST_PASSWORD = "#supria2003"
+# EMAIL CONFIGURATION (HOSTINGER SMTP)
+
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+
+EMAIL_HOST = 'smtp.hostinger.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_USE_SSL = False
+
+EMAIL_HOST_USER = 'support@thedatatechlabs.com'
+EMAIL_HOST_PASSWORD = 'Tdtl@2025#'
+
+DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
+SERVER_EMAIL = EMAIL_HOST_USER
+
 CACHES = {
     "default": {
-        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
-        "LOCATION": "blog-cache",
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache"
     }
 }
 
